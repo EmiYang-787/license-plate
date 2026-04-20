@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+/data/
+/logs/
+
+# Weights
+/ai/detection/weights/
+
+# Dependencies
+venv/
+env/
+*.egg-info/
+
+# Build
+/build/
+/dist/
+
+# Configuration
+*.local
+*.env
+
+# Temporary
+*.tmp
+*.temp
