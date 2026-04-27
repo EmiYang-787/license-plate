@@ -1,2 +1,7 @@
-PyQt5
+
+=======
+ultralytics
+paddleocr
 opencv-python
+paddlepaddle
+>>>>>>> 4f627c7d56281ae7432f88abec12c519813d03b5
