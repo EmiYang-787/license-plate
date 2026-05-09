@@ -1,216 +1,244 @@
+"""
+主界面模块
+职责：布局管理、视频渲染、结果展示、按钮交互
+"""
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFrame, QTableWidget, QTableWidgetItem,
-    QHeaderView
+    QLabel, QPushButton, QTextEdit, QFileDialog, QMessageBox,
+    QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView
 )
-from PyQt5.QtCore import Qt, QTimer, QDateTime
-from PyQt5.QtGui import QImage, QPixmap, QColor, QBrush
+from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtGui import QImage, QPixmap
+import cv2
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("车牌识别停车场管理系统")
-        self.setFixedSize(1400, 900)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #0F1A2B;
-                color: #FFFFFF;
-            }
-            QFrame {
-                background-color: #1A2B42;
-                border-radius: 8px;
-            }
+        self.setMinimumSize(1200, 750)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        # ========== 主布局 ==========
+        main_layout = QHBoxLayout(central)
+        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+
+        # ========== 左侧：视频显示区 ==========
+        left_layout = QVBoxLayout()
+
+        # 视频画面
+        self.video_label = QLabel("等待视频源...")
+        self.video_label.setAlignment(Qt.AlignCenter)
+        self.video_label.setMinimumSize(640, 480)
+        self.video_label.setStyleSheet("""
             QLabel {
-                color: #E0E6ED;
-            }
-            QPushButton {
-                border: none;
+                background-color: #1e1e1e;
+                color: #ffffff;
+                font-size: 18px;
+                border: 2px solid #444;
                 border-radius: 6px;
-                padding: 12px;
-                font-size: 14px;
-                font-weight: bold;
-                color: white;
-            }
-            QPushButton#btn_open {
-                background-color: #007AFF;
-            }
-            QPushButton#btn_camera {
-                background-color: #34C759;
-            }
-            QPushButton#btn_stop {
-                background-color: #FF9500;
-            }
-            QPushButton#btn_clear {
-                background-color: #636E72;
-            }
-            QTableWidget {
-                background-color: #1A2B42;
-                color: #E0E6ED;
-                border: none;
-                gridline-color: #34495E;
-            }
-            QHeaderView::section {
-                background-color: #2C3E50;
-                color: #FFFFFF;
-                border: none;
             }
         """)
+        left_layout.addWidget(self.video_label)
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
+        # 控制按钮区
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
 
-        # ========== 左侧：功能控制 + 状态 ==========
-        left_layout = QVBoxLayout()
-        control_frame = QFrame()
-        control_layout = QVBoxLayout(control_frame)
-        control_layout.setContentsMargins(15, 15, 15, 15)
-        control_layout.setSpacing(12)
+        self.btn_start_video = QPushButton("📁 开始视频")
+        self.btn_open_camera = QPushButton("📷 打开摄像头")
+        self.btn_stop = QPushButton("⏹ 停止")
+        self.btn_stop.setEnabled(False)
 
-        control_title = QLabel("功能控制")
-        control_title.setStyleSheet("color:#4ECDC4; font-size:16px; font-weight:bold;")
-        self.btn_video = QPushButton("打开视频")
-        self.btn_video.setObjectName("btn_open")
-        self.btn_camera = QPushButton("打开摄像头")
-        self.btn_camera.setObjectName("btn_camera")
-        self.btn_stop = QPushButton("停止")
-        self.btn_stop.setObjectName("btn_stop")
-        self.btn_clear = QPushButton("清空记录")
-        self.btn_clear.setObjectName("btn_clear")
+        # 按钮样式
+        btn_style = """
+            QPushButton {
+                font-size: 14px;
+                padding: 10px 20px;
+                border-radius: 5px;
+                background-color: #2d8cf0;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover { background-color: #1a7de0; }
+            QPushButton:disabled { background-color: #999; }
+            QPushButton#stop { background-color: #ed4014; }
+            QPushButton#stop:hover { background-color: #d9360e; }
+        """
+        self.btn_start_video.setStyleSheet(btn_style)
+        self.btn_open_camera.setStyleSheet(btn_style)
+        self.btn_stop.setStyleSheet(btn_style.replace("QPushButton {", "QPushButton { background-color: #ed4014;"))
+        self.btn_stop.setObjectName("stop")
 
-        control_layout.addWidget(control_title)
-        control_layout.addWidget(self.btn_video)
-        control_layout.addWidget(self.btn_camera)
-        control_layout.addWidget(self.btn_stop)
-        control_layout.addWidget(self.btn_clear)
+        btn_layout.addWidget(self.btn_start_video)
+        btn_layout.addWidget(self.btn_open_camera)
+        btn_layout.addWidget(self.btn_stop)
+        btn_layout.addStretch()
 
-        # 状态区
-        status_frame = QFrame()
-        status_layout = QVBoxLayout(status_frame)
-        status_layout.setContentsMargins(15, 15, 15, 15)
-        status_title = QLabel("系统状态")
-        status_title.setStyleSheet("color:#4ECDC4; font-size:16px; font-weight:bold;")
-        self.status_video = QLabel("视频：未打开")
-        self.status_recognize = QLabel("识别：未开始")
-        self.status_time = QLabel("时间：--")
+        left_layout.addLayout(btn_layout)
+        main_layout.addLayout(left_layout, stretch=3)
 
-        status_layout.addWidget(status_title)
-        status_layout.addWidget(self.status_video)
-        status_layout.addWidget(self.status_recognize)
-        status_layout.addWidget(self.status_time)
-
-        left_layout.addWidget(control_frame)
-        left_layout.addWidget(status_frame)
-        main_layout.addLayout(left_layout, 1)
-
-        # ========== 中间：视频 + 记录表格 ==========
-        center_layout = QVBoxLayout()
-        video_frame = QFrame()
-        video_layout = QVBoxLayout(video_frame)
-        video_layout.setContentsMargins(15, 15, 15, 15)
-        video_title = QLabel("实时画面")
-        video_title.setStyleSheet("color:#4ECDC4; font-size:16px; font-weight:bold;")
-        self.video_label = QLabel()
-        self.video_label.setStyleSheet("background-color:#000; border-radius:4px;")
-        self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setMinimumSize(800, 500)
-        self.fps_label = QLabel("FPS: 0.0")
-        self.fps_label.setStyleSheet("color:#34C759;")
-
-        video_layout.addWidget(video_title)
-        video_layout.addWidget(self.video_label)
-        video_layout.addWidget(self.fps_label)
-
-        # 记录表
-        record_frame = QFrame()
-        record_layout = QVBoxLayout(record_frame)
-        record_layout.setContentsMargins(15, 15, 15, 15)
-        record_title = QLabel("识别记录")
-        record_title.setStyleSheet("color:#4ECDC4; font-size:16px; font-weight:bold;")
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([
-            "车牌号", "状态", "入场时间", "出场时间", "时长", "状态"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-
-        record_layout.addWidget(record_title)
-        record_layout.addWidget(self.table)
-
-        center_layout.addWidget(video_frame)
-        center_layout.addWidget(record_frame)
-        main_layout.addLayout(center_layout, 3)
-
-        # ========== 右侧：识别结果 ==========
+        # ========== 右侧：结果展示区 ==========
         right_layout = QVBoxLayout()
-        result_frame = QFrame()
-        result_layout = QVBoxLayout(result_frame)
-        result_layout.setContentsMargins(15, 15, 15, 15)
-        result_title = QLabel("识别结果")
-        result_title.setStyleSheet("color:#4ECDC4; font-size:16px; font-weight:bold;")
-        self.plate_label = QLabel("--")
-        self.plate_label.setStyleSheet("font-size:36px; font-weight:bold; color:#fff;")
-        self.plate_label.setAlignment(Qt.AlignCenter)
-        self.info1 = QLabel("状态：--")
-        self.info2 = QLabel("入场时间：--")
-        self.info3 = QLabel("停车时长：--")
 
-        result_layout.addWidget(result_title)
-        result_layout.addWidget(self.plate_label)
-        result_layout.addWidget(self.info1)
-        result_layout.addWidget(self.info2)
-        result_layout.addWidget(self.info3)
+        # 实时识别日志
+        log_group = QGroupBox("📝 实时识别记录")
+        log_layout = QVBoxLayout(log_group)
 
-        right_layout.addWidget(result_frame)
-        main_layout.addLayout(right_layout, 1)
+        self.result_text = QTextEdit()
+        self.result_text.setReadOnly(True)
+        self.result_text.setStyleSheet("""
+            QTextEdit {
+                font-size: 13px;
+                font-family: "Microsoft YaHei", "SimHei", sans-serif;
+                background-color: #f8f9fa;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                padding: 8px;
+                line-height: 1.6;
+            }
+        """)
+        log_layout.addWidget(self.result_text)
+        right_layout.addWidget(log_group, stretch=1)
 
-        # 定时器刷新时间
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_clock)
-        self.timer.start(1000)
+        # 在场车辆表格
+        table_group = QGroupBox("🚗 当前在场车辆")
+        table_layout = QVBoxLayout(table_group)
 
-    def update_clock(self):
-        now = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
-        self.status_time.setText(f"时间：{now}")
+        self.table_active = QTableWidget()
+        self.table_active.setColumnCount(3)
+        self.table_active.setHorizontalHeaderLabels(["车牌号", "入场时间", "状态"])
+        self.table_active.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_active.setStyleSheet("""
+            QTableWidget {
+                font-size: 13px;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+            }
+            QHeaderView::section {
+                background-color: #fafafa;
+                padding: 6px;
+                border: 1px solid #d9d9d9;
+                font-weight: bold;
+            }
+        """)
+        table_layout.addWidget(self.table_active)
+        right_layout.addWidget(table_group, stretch=1)
 
-    def update_frame(self, q_img):
-        self.video_label.setPixmap(
-            QPixmap.fromImage(q_img).scaled(self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # 状态栏
+        self.status_label = QLabel("就绪 | 等待操作...")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 12px;
+                padding: 6px;
+                background-color: #f0f0f0;
+                border-radius: 4px;
+            }
+        """)
+        right_layout.addWidget(self.status_label)
+
+        main_layout.addLayout(right_layout, stretch=2)
+
+    # ========== 公共接口（供Controller调用） ==========
+
+    @pyqtSlot(object)
+    def update_frame(self, frame):
+        """将OpenCV帧渲染到QLabel"""
+        if frame is None:
+            return
+
+        # BGR → RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_frame.shape
+        bytes_per_line = ch * w
+
+        qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(qt_image)
+
+        # 等比例缩放适应显示区域
+        scaled = pixmap.scaled(
+            self.video_label.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
         )
+        self.video_label.setPixmap(scaled)
 
-    def update_result(self, info: dict):
-        self.plate_label.setText(info.get("plate", "--"))
-        self.info1.setText(f"状态：{info.get('msg', '--')}")
-        self.info2.setText(f"入场时间：{info.get('time', '--')}")
-        self.info3.setText(f"停车时长：{info.get('duration', '--')}")
+    @pyqtSlot(list)
+    def update_results(self, results):
+        """
+        批量更新识别结果
+        :param results: List[dict]  handle_plate返回的结果列表
+        """
+        for data in results:
+            self._append_single_result(data)
 
-    def add_record(self, info: dict):
-        row = self.table.rowCount()
-        self.table.insertRow(row)
-        self.table.setItem(row, 0, QTableWidgetItem(info.get("plate", "")))
-        self.table.setItem(row, 1, QTableWidgetItem(info.get("msg", "")))
-        self.table.setItem(row, 2, QTableWidgetItem(info.get("entry_time", "")))
-        self.table.setItem(row, 3, QTableWidgetItem(info.get("exit_time", "--")))
-        self.table.setItem(row, 4, QTableWidgetItem(info.get("duration", "--")))
+    def _append_single_result(self, data: dict):
+        """单条结果格式化显示"""
+        plate = data.get("plate", "未知")
+        status = data.get("status", "")
+        time_str = data.get("time", "")
+        duration = data.get("duration")
 
-        item = QTableWidgetItem(info.get("status_text", ""))
-        if info.get("status") == 0:
-            item.setForeground(QBrush(QColor("#34C759")))
+        if status == "entry":
+            msg = f"[{time_str}] 🚗 <b>车辆入场</b> | 车牌: <span style='color:#2d8cf0;'>{plate}</span>"
+            self._add_active_vehicle(plate, time_str)
+        elif status == "exit":
+            if duration is not None:
+                msg = (f"[{time_str}] 🚙 <b>车辆出场</b> | 车牌: <span style='color:#19be6b;'>{plate}</span> "
+                       f"| 停车时长: <b>{duration:.2f}</b> 小时")
+            else:
+                msg = f"[{time_str}] 🚙 <b>车辆出场</b> | 车牌: {plate}"
+            self._remove_active_vehicle(plate)
         else:
-            item.setForeground(QBrush(QColor("#FF3B30")))
-        self.table.setItem(row, 5, item)
+            msg = f"[{time_str}] ⚠ 未知状态 | 车牌: {plate}"
 
-    def clear_table(self):
-        self.table.setRowCount(0)
+        self.result_text.append(msg)
 
-    def set_video_status(self, text):
-        self.status_video.setText(f"视频：{text}")
+    def _add_active_vehicle(self, plate: str, entry_time: str):
+        """添加到在场车辆表"""
+        row = self.table_active.rowCount()
+        self.table_active.insertRow(row)
+        self.table_active.setItem(row, 0, QTableWidgetItem(plate))
+        self.table_active.setItem(row, 1, QTableWidgetItem(entry_time))
+        status_item = QTableWidgetItem("在场")
+        status_item.setForeground(Qt.red)
+        self.table_active.setItem(row, 2, status_item)
 
-    def set_recognize_status(self, text):
-        self.status_recognize.setText(f"识别：{text}")
+    def _remove_active_vehicle(self, plate: str):
+        """从在场车辆表移除"""
+        for row in range(self.table_active.rowCount()):
+            item = self.table_active.item(row, 0)
+            if item and item.text() == plate:
+                self.table_active.removeRow(row)
+                break
 
-    def update_fps(self, fps):
-        self.fps_label.setText(f"FPS: {fps:.1f}")
+    @pyqtSlot(str)
+    def update_status(self, text: str):
+        self.status_label.setText(text)
+
+    def get_video_path(self) -> str:
+        """弹出视频选择对话框"""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择视频文件",
+            "",
+            "视频文件 (*.mp4 *.avi *.mkv *.mov);;所有文件 (*)"
+        )
+        return path
+
+    def reset_ui_state(self):
+        """重置按钮状态"""
+        self.btn_start_video.setEnabled(True)
+        self.btn_open_camera.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.video_label.setText("等待视频源...")
+        self.video_label.setPixmap(QPixmap())  # 清空画面
+
+    def show_error(self, title: str, message: str):
+        QMessageBox.critical(self, title, message)
